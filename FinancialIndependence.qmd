@@ -1,0 +1,448 @@
+---
+documentclass : report
+echo: FALSE
+editor: visual
+message: FALSE
+warning: FALSE
+output: FALSE
+pdf_document:
+latex_engine: xelatex
+top-margin: 1in
+geometry: margin = 1.5cm
+format: pdf
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+
+
+```
+
+# **Reddit Survey on Financial Independence**
+
+#### Overview:
+
+The dataset is from Reddit Survey and represents the financial independence of individuals and other variables that related to it such as person's curent assets, liablities, income etc. and the data does not include retired individuals.
+
+The purpose of the model is to understand the factors that contribute to whether a person would feel financially independent or not?\
+The dataset has 1998 rows and 65 variables.
+
+The following link gives a clear description of all the outcome variables :
+
+https://www.openintro.org/data/index.php?data=reddit_finance
+
+The purpose of this project is to model for Financial Independence of a person using certain Input Variables.
+
+#### Data Cleaning:
+
+Data Cleaning had to be done for this project. Any ASSUMPTIONS in the cleaning process has been put in Block Letters.
+
+1.  Feature Engineering:
+
+    -   All expenses related columns were combined to make a separate column total_exp. Since expenses remain similar for a person over the years, it is sensible to combine to a more consistent variable. Variables combined were :
+
+    (\`2020 housing expenditure, 2020 utilities expenditure, 2020 transport expenditure\`, 2020 necessities expenditure, 2020 luxury expenditure, 2020 child expenditure, 2020 debt repayment, 2020 charity, 2020 healthcare expenditure, 2020 taxes paid, 2020 educational expenses, 2020 other expenditure\`)
+
+    -   All Debts/Liablities related columns were combined to make a separate column total_liablities. This is crucial because a person would only feel financially independent considering all his liablities together and hence giving the model a more consistent variable.
+
+        (\`student loans\`, \`mortgage\`, \`auto loan\`, \`credit personal loan\`,\`medical debt\`, \`Debt from Investment Properties\`, \`Other Debt')
+
+    -   All Assets/Holdings related columns were combined to make a separate column total_asssets. This is crucial because a person would only feel financially independent considering all his assets and net worth together. Variables combined were :
+
+        ( \`home value\`, \`brokerage accounts tax\`, \`retirement accts tax\`, \`cash\`, \`invsestment accounts\`, \`crypto investment\`, \`Investment in Properties / businesses\`, \`Other Assets\`)
+
+    -   The four columns representing full time status, part time status, gig status and not employed status"represents the work status of an individual. The data collection was poor for this as these could have been combined into one column. Hence, these variables were combined to create a separate column '`work_status'`. So, combining would make one consistent column with different work statuses. The final column would limit values to three different types : full time, part time, personal gig, unemployed.
+
+    -   For the variable representing 'relationship status', it had 6 distinct values which could be combined to either 'Single' or \`in a Relationship\`.
+
+    -   The column 'children' had 4 entries - 1. 'Do not have children but intend to' 2. 'Have children' (Both combined to one entry 'Yes') 3. 'N/A' and 4. 'Do not have children and do not intend to' (Both combined to one entry 'No'). This is done **ASSUMING** people who have children or intend to have them will have different financial independence number than people who don't have children.
+
+2.  The age(current age) and retire_age(represents at what age person wants to retire) variable was in the format of a range like '21-25'. The mean value was taken of this range to be used to provide a numerical variable to the model and mean would give an average output of each range of ages.
+
+3.  For the column 'Country', there were 54 different countries and all data is represented in their individual currency, creating inconsistency. USA, UK, Australia and Canada holds 97% of the values in the data and are amongst the developed countries. So all the data of other countries apart from the mentioned ones were removed. \
+    We **ASSUME** here that USA, UK, Australia, Canada are similarly developed nations.
+
+4.  For the purpose of our model, the gender values were combined into 3 distinct values - Male, Female and Others for consistency.
+
+5.  **MISSING VALUES:** We removed the all the rows with n/a values: Total expenditure , Total worth , Total liablities , 2020 investment saving, 2020 gross income, retiring age, current age , children, gender and Number of Income Earning Members
+
+```{r}
+library(openintro)
+data('reddit_finance')
+```
+
+```{r}
+library(dplyr)
+library(tidyr) 
+
+```
+
+```{r}
+colnames(reddit_finance)
+```
+
+```{r}
+missing_data_rows <- reddit_finance[!complete.cases(reddit_finance), ]
+
+# Display rows with missing data
+missing_data_rows
+
+
+```
+
+```{r}
+reddit_finance <- reddit_finance %>%
+  mutate(total_exp = rowSums(select(reddit_finance, 
+    `2020_housing_exp`, `2020_utilities_exp`, `2020_transp_exp`, `2020_necessities_exp`,
+    `2020_lux_exp`, `2020_child_exp`, `2020_debt_repay`, `2020_charity`, 
+    `2020_healthcare_exp`, `2020_taxes`, `2020_edu_exp`, `2020_other_exp`), na.rm = TRUE))
+```
+
+```{r}
+reddit_finance <- reddit_finance %>%
+  mutate(total_liablities = rowSums(select(reddit_finance, 
+    `student_loans`, `mortgage`, `auto_loan`, `credit_personal_loan`,
+    `medical_debt`, `invst_prop_bus_own_debt`, `other_debt`), na.rm = TRUE))
+```
+
+```{r}
+reddit_finance <- reddit_finance %>%
+  mutate(total_worth = rowSums(select(reddit_finance, 
+    `home_value`, `brokerage_accts_tax`, `retirement_accts_tax`, `cash`,
+    `invst_accts`, `spec_crypto`, `invst_prop_bus_own`, `other_val`), na.rm = TRUE))
+```
+
+```{r}
+reddit_finance %>% count(ne_status)
+```
+
+```{r}
+reddit_finance <- reddit_finance %>%
+  mutate(ft_status = na_if(ft_status, "N/A"))
+```
+
+```{r}
+reddit_finance <- reddit_finance %>%
+  mutate(pt_status = na_if(pt_status, "N/A"))
+```
+
+```{r}
+reddit_finance <- reddit_finance %>%
+  mutate(gig_status = na_if(gig_status, "N/A"))
+```
+
+```{r}
+reddit_finance <- reddit_finance %>%
+  mutate(ne_status = na_if(ne_status, "N/A"))
+```
+
+```{r}
+reddit_finance <- reddit_finance %>%
+  mutate(work_status = case_when(
+    !is.na(ft_status) ~ paste("full time"),
+    !is.na(pt_status) ~ paste("part time"),
+    !is.na(gig_status) ~ paste("part time"),
+    !is.na(ne_status) ~ paste("full time"),
+    TRUE ~ NA_character_
+  ))
+
+
+```
+
+```{r}
+reddit_finance %>% count(work_status)
+```
+
+```{r}
+
+reddit_finance$work_status <- replace(reddit_finance$work_status, is.na(reddit_finance$work_status), "Unemployed")
+```
+
+```{r}
+reddit_finance %>% count(work_status)
+```
+
+```{r}
+reddit_finance %>% count(retire_age)
+```
+
+```{r}
+reddit_finance <- reddit_finance %>%
+  mutate(retire_age = case_when(
+    retire_age %in% c("Undecided") ~ NA_real_,
+    retire_age == "24-28" ~ 26,
+    retire_age == "29-33" ~ 31,
+    retire_age == "34-38" ~ 36,
+    retire_age == "39-43" ~ 41,
+    retire_age == "44-48" ~ 46,
+    retire_age == "49-53" ~ 51,
+    retire_age == "54-58" ~ 56,
+    retire_age == "59-63" ~ 61,
+    retire_age == "64-68" ~ 66,
+    retire_age == "69+" ~ 71,
+    TRUE ~ as.integer(retire_age)))
+```
+
+```{r}
+reddit_finance %>% count(retire_age)
+```
+
+```{r, output=TRUE, warning=FALSE, message=FALSE, fig.height=5, fig.width=5}
+# Assuming 'reddit_finance$fin_indy' contains categorical data
+financial_independence <- reddit_finance$fin_indy
+
+# Create a table of frequencies
+frequency_table <- table(financial_independence)
+
+# Calculate the percentages and round to one decimal place
+percentages <- round(prop.table(frequency_table) * 100, 1)
+
+# Create a pie chart with percentages displayed
+pie(frequency_table, 
+    main = "Financial Independence Status",
+    labels = paste(names(frequency_table), " (", percentages, "%)"),
+    col = c("blue", "red"))
+
+
+```
+
+```{r}
+reddit_finance <- reddit_finance %>%
+  mutate(age = case_when(
+    age %in% c("<18", "N/A", "NA") ~ NA_real_,
+    age == "18-23" ~ 21,
+    age == "24-28" ~ 26,
+    age == "29-33" ~ 31,
+    age == "34-38" ~ 36,
+    age == "39-43" ~ 41,
+    age == "44-48" ~ 46,
+    age == "49-53" ~ 51,
+    age == "54-58" ~ 56,
+    age == "59-63" ~ 61,
+    TRUE ~ as.numeric(age)
+  ))
+
+reddit_finance$age <- as.numeric(reddit_finance$age)
+```
+
+```{r}
+reddit_finance %>% count(age)
+```
+
+```{r}
+reddit_finance %>% count(country)
+```
+
+```{r}
+reddit_finance_sub <- reddit_finance %>% filter(country == 'United States' |country == 'Canada' | country == 'Australia' | country == 'United Kingdom' | country == 'Uk')
+
+```
+
+```{r}
+reddit_finance_sub %>% count(children)
+```
+
+```{r}
+reddit_finance_sub <- reddit_finance_sub %>%
+  mutate(children = case_when(
+    children == "Do not have children, and do not intend to	" ~ "No",
+    children == "Do not have children, but intend to" ~ "Yes",
+    children == "Have children" ~ "Yes",
+    children == "N/A" ~ "No",
+  ))
+```
+
+```{r}
+reddit_finance_sub$children <- replace(reddit_finance_sub$children, is.na(reddit_finance_sub$children), "No")
+```
+
+```{r}
+reddit_finance_sub %>% count(rel_status)
+```
+
+```{r}
+boxplot(reddit_finance_sub$cash, main="Box Plot of Var1", ylab="Values")
+
+```
+
+```{r}
+reddit_finance_sub <- reddit_finance_sub %>%
+  mutate(rel_status = case_when(
+    rel_status == "Divorced" ~ "Single",
+    rel_status == "Divorced - Remarried" ~ "Relationship",
+    rel_status == "In a relationship, but not married" ~ "Relationship",
+    rel_status == "Married" ~ "Relationship",
+    rel_status == "N/A" ~ "Single",
+    rel_status == "Single, never married" ~ "Single",
+    rel_status == "Widowed" ~ "Single",
+    rel_status == "Widowed - Remarried" ~ "Relationship",
+  ))
+```
+
+```{r}
+reddit_finance_sub$rel_status <- replace(reddit_finance_sub$rel_status, is.na(reddit_finance_sub$rel_status), "Single")
+```
+
+```{r}
+reddit_finance_sub %>% count(gender)
+```
+
+```{r}
+reddit_finance_sub <- reddit_finance_sub %>%
+  mutate(gender = case_when(
+    gender == "Decline to State" ~ "Other",
+    gender == "Non-Binary" ~ "Other",
+    gender == "N/A" ~ "Other",
+    gender == "Decline to State" ~ "Other",
+    gender == "Male" ~ "Male",
+    gender == "Female" ~ "Female",
+  ))
+```
+
+```{r}
+colnames(reddit_finance_sub)
+```
+
+### Modeling:
+
+1.  Our outcome variable - 'fin_indy' which represents whether the person is financially independent or not.
+
+2.  We used **logistic regression** for our model here. Since our results will be either in the form of Yes or No, i.e. if a person feels financially independent or not, *the outcome is binary* it becomes sense to use logistic regression for our problem.
+
+3.  For our first model - As per priori selection, we took the following variables for our first model : \
+    total expenditure, total worth, total liablities, 2020 investment saving, 2020 gross income, retiring age, current age, retire expenditure, Annual Income from Retired Assets, Target Safe Withdrawl Rate, Investment Amount for Retirement, Percent Financial Independence achieved, Children , Gender Number of Income Earning Members . \
+    The p-values for all of these came out to be very high, greater than 0.95 and hence we removed a few variables to focus on the more essential variables.
+
+4.  For our second model - we used the following variables :\
+    Total expenditure (numerical), Total worth (numerical), Total liablities (numerical) , 2020 investment saving\`(numerical), 2020 gross income(numerical), retiring age(numerical), current age (numerical) , children (categorical), gender (categorical) and Number of Income Earning Members (numerical)
+
+    REASON TO SELECT THE VARIABLES : These seemed to be highly correlated to a person considering him as financially independent. For instance, a person who has a lot of total_worth and less total Liablities would be more prone to feeling financially independent. Similarly, a person's current age would would be correlated to how much savings, assets would a person own and being financially independent.
+
+```{r}
+reddit_finance_supersub <- na.omit(reddit_finance_sub[, c("total_exp", "total_worth","total_liablities",'2020_invst_save','2020_gross_inc','retire_age','age','children','gender','num_incomes','fin_indy')])
+```
+
+```{r}
+
+
+reddit_finance_supersub$fin_indy <- ifelse(reddit_finance_supersub$fin_indy == 'Yes', 1, 0)
+
+```
+
+```{r}
+logistic_mod <- glm(factor(fin_indy)~total_exp+total_worth+total_liablities+`2020_invst_save`+`2020_gross_inc`+retire_age+age+retire_exp+max_retire_sup+tgt_sf_wthdrw_rt+retire_invst_num+fin_indy_pct+fin_indy_pct+factor(children)+factor(gender)+num_incomes,
+                    data=reddit_finance_sub,
+                    family="binomial")
+summary(logistic_mod)
+```
+
+```{r}
+logistic_mod1 <- glm(factor(fin_indy)~total_exp+total_worth+total_liablities+`2020_invst_save`+`2020_gross_inc` + retire_age + age + factor(children) + factor(gender)+ num_incomes,
+                    data=reddit_finance_sub,
+                    family="binomial")
+summary(logistic_mod1)
+
+```
+
+#### Model 1:
+
+After performing the first model, we got a result where all the P-values were greater than 0.95. The model couldn't indicate any strong relationship between being Financially Independent and other variables. So we had to reduce the variables to make a better model.
+
+#### Model 2 & Cook's Distance :
+
+Our model 2 gives us strong relationships between various variables with Financial Independence.
+
+```{r}
+plot(logistic_mod1, which = 4)
+```
+
+The plot above shows that the one data point was highly influencing our model. We wanted to run another model after removing this influence point and see the results. The point of discussion here with clients is to understand the reason for that data point influencing our model.
+
+### Final Model Output :
+
+```{r}
+reddit_finance_supersub %>% count(fin_indy)
+
+```
+
+```{r}
+reddit_finance_supersub
+
+```
+
+```{r, output=TRUE}
+
+logistic_mod2 <- glm(factor(fin_indy)~total_exp+total_worth+total_liablities+`2020_invst_save`+`2020_gross_inc` + retire_age + age + factor(children) + factor(gender)+ num_incomes,
+                    data=reddit_finance_supersub,
+                    family="binomial")
+summary(logistic_mod2)
+
+```
+
+```{r}
+plot(logistic_mod2, which = 4)
+```
+
+```{r}
+library(car)
+
+vif_graph = vif(logistic_mod2, type = 'predictor') 
+```
+
+```{r}
+confint(logistic_mod1)
+
+```
+
+```{r}
+exp(confint(logistic_mod2))
+
+```
+
+```{r}
+library(pROC)
+roc(as.factor(reddit_finance_supersub$fin_indy),fitted(logistic_mod2),print.thres="best",plot=TRUE,print.auc=TRUE)
+
+
+```
+
+```{r, output = TRUE, warning=FALSE, message=FALSE, fig.height=3, fig.width=3}
+roc_data <- roc(as.factor(reddit_finance_supersub$fin_indy),fitted(logistic_mod2),print.thres="best",print.auc=TRUE)
+plot(roc_data, main="ROC Curve", print.thres=TRUE)
+legend("bottomright", legend=sprintf("AUC = %.2f", auc(roc_data)), col=1, lty=1, cex=0.8)
+```
+
+### Model Interpretation:
+
+1.  Our final model gives us strong results where we found multiple input variables highly correlated with the output variable of Financial Independence. These include - Net Worth, Total Liablities, Retiring Age, Current Age, Gender and Number of Income Earning Members.
+2.  We have used AUC metric to interpret the results. The model's AUC comes as 0.91, showing strong performance of the classification model.
+
+```{r, output = TRUE}
+library(caret)
+
+confusionMatrix(factor(ifelse(fitted(logistic_mod2)>0.107,"1","0")),factor(reddit_finance_supersub$fin_indy),positive="1",mode="everything")
+```
+
+### Results : 
+
+1.  The sensitivity of the model is 0.79, indicating that model is able to predict 79% of the true positive instances compared to all positive instances.
+2.  With each additional total worth, the log odds of Financial Independence increases by 1.653 \* 10\^-6, all else held constant.
+3.  With each additional increase in Age, the log odds of Financial Independence increases by 0.092, all else held constant.
+4.  The sensitivity of the model is 0.93, indicating that model is able to predict 93% of the true negative instances compared to all negative instances.
+5.  Our Kappa value comes out to be 0.48, suggesting that there is a 48% agreement beyond what would be expected by chance alone. This indicates a moderate level of agreement between the observers or raters involved in the study.
+
+```{r, output = TRUE, warning=FALSE, message=FALSE, fig.height=3, fig.width=3}
+ggplot(reddit_finance_supersub, aes(x = as.factor(fin_indy), y = log(total_worth))) +
+  geom_boxplot() +  # Use geom_boxplot() to create a box plot
+  labs(y = "Total Worth", x = "Financial Independence")
+```
+
+4.  The plot above compare Total Worth with Financial Independence. It is clearly observed that there's a clear difference between people's worth between the two classes, validating our model's output that Net Worth is strongly correlated with Financial Independence.
+
+### Conclusions : 
+
+1.  We can conclude that variables Net Worth, Total Liablities, Retiring Age, Current Age, Gender and Number of Income Earning Members are the factors that contribute to whether someone considers themselves as financially independent.
+
+### Future Work : 
+
+There's an issue with data imbalance. Around 93% of the people represents the data supporting they arent financially independent. Hence, for future more data needs to be collected for a better model.
